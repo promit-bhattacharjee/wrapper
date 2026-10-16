@@ -1,0 +1,16 @@
+{
+  "name": "wrapper",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Coordination layer for parallel coding agents (v3 port).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": { "wrapper": "packages/cli/bin/wrapper.mjs" },
+  "imports": {
+    "#core/*": "./packages/core/src/*",
+    "#cli/*": "./packages/cli/src/*",
+    "#fixtures/*": "./tests/fixtures/*"
+  },
+  "scripts": { "test": "node --test" },
+  "engines": { "node": ">=20" }
+}
