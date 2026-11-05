@@ -1,0 +1,58 @@
+{
+  "$comment": "Compact machine schemas for .wrapper/{docs,agents,track} v4.2",
+  "spec_req": {
+    "required": ["id", "s", "w", "do", "f"],
+    "fields": {
+      "id": "Requirement ID (e.g. SL-01)",
+      "s": "Short slice slug (e.g. checkout)",
+      "w": "EARS trigger / HTTP method + route",
+      "do": "Deterministic invariant / state transition",
+      "err": "Expected error status:code pairs",
+      "f": "Interned file symbols from _sym.json",
+      "t": "Blind test identifier",
+      "v": "Integer requirement revision"
+    }
+  },
+  "spec_meta": {
+    "required": ["feat", "v", "intent", "plan", "radius"],
+    "fields": {
+      "feat": "Canonical functional domain name",
+      "intent": "Compact goal, actors, non-goals",
+      "plan": "Architecture notes, contracts, ordering",
+      "radius": "{ own: [F..], ro: [F..], shared: [F..] }",
+      "deploy_link": "Two-way pointer to docs/deploy.json"
+    }
+  },
+  "employee_card": {
+    "required": ["id", "h", "n", "ti", "jd", "r", "lv", "st", "pts", "wl", "cap", "xp"],
+    "fields": {
+      "id": "emp-NNN",
+      "h": "short handle",
+      "n": "Full human name",
+      "ti": "Job title",
+      "jd": "Job description",
+      "tm": "Squad ID",
+      "r": "re|hr|pm|des|eng|maint|qa",
+      "lv": "Lead|Sigma|L3|L2|L1",
+      "mgr": "Manager emp-id or CEO",
+      "st": "active|probation|terminated",
+      "pts": "Reputation score (init 100)",
+      "wl": "[wins, bugs, lies, bounces]",
+      "cap": "{ tech:[], dom:[], rad:[], tools:[] }",
+      "inst": "Role-specific operating instruction",
+      "pat": "Working patterns array",
+      "taste": "Personal taste preferences array",
+      "xp": "{ hf:{fileCode:count}, good:[], bad:[], lessons:[] }"
+    }
+  },
+  "matrix_row": {
+    "required": ["feat", "req", "pct", "stage"],
+    "stages": {
+      "0": "open",
+      "25": "claimed_or_blind_test",
+      "50": "coded_in_radius",
+      "80": "test_receipt_green",
+      "100": "verified"
+    }
+  }
+}

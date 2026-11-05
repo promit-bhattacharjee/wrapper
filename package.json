@@ -1,16 +1,28 @@
 {
   "name": "wrapper",
-  "version": "0.0.1",
-  "private": true,
-  "description": "Coordination layer for parallel coding agents (v3 port).",
+  "version": "4.2.0",
+  "description": "Multi-Agent Coordination & Virtual Software Company Engine for Claude Code, Antigravity, ChatGPT/Codex, and OpenCode",
   "license": "Apache-2.0",
   "type": "module",
-  "bin": { "wrapper": "packages/cli/bin/wrapper.mjs" },
-  "imports": {
-    "#core/*": "./packages/core/src/*",
-    "#cli/*": "./packages/cli/src/*",
-    "#fixtures/*": "./tests/fixtures/*"
+  "main": "./bin/wrapper.mjs",
+  "bin": {
+    "wrapper": "./bin/wrapper.mjs"
   },
-  "scripts": { "test": "node --test" },
-  "engines": { "node": ">=20" }
+  "scripts": {
+    "test": "node --test tests/checkpoint.test.mjs tests/v4.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "ai-agents",
+    "multi-agent",
+    "claude-code",
+    "antigravity",
+    "codex",
+    "living-specs",
+    "virtual-software-company",
+    "tdd",
+    "coordination"
+  ]
 }

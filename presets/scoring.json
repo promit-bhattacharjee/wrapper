@@ -1,0 +1,31 @@
+{
+  "version": "4.2.0",
+  "starting_points": 100,
+  "match_threshold": 0.80,
+  "weights": {
+    "tech": 0.30,
+    "domain": 0.25,
+    "file_xp": 0.20,
+    "level_role": 0.15,
+    "reputation": 0.10
+  },
+  "thresholds": {
+    "star": 120,
+    "active": 90,
+    "probation": 65,
+    "max_lies_before_termination": 2
+  },
+  "events": {
+    "CLEAN_PASS": { "delta": 5, "kind": "win", "desc": "Verified 1st-pass delivery with hash-locked test receipt and 0 QA bounces" },
+    "BLIND_TEST_AUTHORED": { "delta": 3, "kind": "win", "desc": "QA authored blind failing test from spec predicate with read-only lock" },
+    "DEFECT_CAUGHT": { "delta": 4, "kind": "win", "desc": "QA or PM caught real spec violation or regression before merge" },
+    "CRISP_HUDDLE": { "delta": 2, "kind": "win", "desc": "Resolved cross-domain blocker cleanly inside room token cap" },
+    "SCOPE_DRIFT": { "delta": -5, "kind": "bounce", "desc": "Attempted edit outside assigned spec .radius or unleased file" },
+    "SILENT_SHORTCUT": { "delta": -6, "kind": "bounce", "desc": "Introduced swallowed catch/pass or hardcoded stub flagged by diff scanner" },
+    "QA_BOUNCE": { "delta": -8, "kind": "bounce", "desc": "Submitted work failed blind test or adversarial spec predicate check" },
+    "TASTE_VIOLATION": { "delta": -10, "kind": "bounce", "desc": "Violated approved TASTE.md / taste.jsonl or team never_do[] rule" },
+    "BUG_INTRODUCED": { "delta": -15, "kind": "bug", "desc": "Escaped regression traced to agent's commit via git blame + Agent-Id trailer" },
+    "LIE_FABRICATED": { "delta": -25, "kind": "lie", "desc": "Claimed tests passed or work verified without matching git tree_hash receipt" },
+    "LIE_TEST_TAMPER": { "delta": -30, "kind": "lie", "desc": "Deleted, skipped, or weakened blind QA test assertions to fake green build" }
+  }
+}

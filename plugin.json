@@ -1,0 +1,20 @@
+{
+  "name": "wrapper",
+  "version": "4.2.0",
+  "description": "High-accuracy, low-token Virtual Software Company & Living Functional Spec Engine over GitHub Spec Kit. Strictly three machine-compact directories (.wrapper/{docs,agents,track}) powered by Node built-in SQLite WAL, deterministic >=80% HR capability+XP matching, Blind TDD read-only test locks, hash-locked execution receipts, git-blame defect clawback, and cross-tool Team PM monitoring across Claude Code, Antigravity, and ChatGPT/Codex.",
+  "cli": "bin/wrapper.mjs",
+  "state": "../../coord/board.json",
+  "v4_state_dirs": [".wrapper/docs", ".wrapper/agents", ".wrapper/track"],
+  "handoff": "../../coord/HANDOFF.md",
+  "rules": "rules/AGENTS.md",
+  "skills": [
+    "skills/wrapper/SKILL.md",
+    "skills/requirement-engineer/SKILL.md",
+    "skills/hr/SKILL.md",
+    "skills/pm-monitor/SKILL.md"
+  ],
+  "hooks": {
+    "claude": "node bin/wrapper.mjs install-hooks [dir] [--local]",
+    "git_pre_commit": "node bin/wrapper.mjs install-git-hook <repo-dir>"
+  }
+}
