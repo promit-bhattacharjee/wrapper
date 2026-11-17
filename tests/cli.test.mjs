@@ -143,3 +143,48 @@ test('map prune drops deleted files; worktree copies (_work) are never indexed',
     assert.match(run(['map', 'prune'], root).stdout, /pruned 1 entry.*1 left/);
   } finally { cleanup(root); }
 });
+
+test('run --isolate: agent works in its own worktree, overlap is flagged, integrate merges cleanly or aborts on conflict', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-iso-'));
+  try {
+    const G = (...a) => { const r = spawnSync('git', a, { cwd: root, encoding: 'utf8' }); assert.equal(r.status, 0, `git ${a.join(' ')}: ${r.stderr}`); return r.stdout.trim(); };
+    G('init', '-q', '-b', 'main'); G('config', 'user.name', 't'); G('config', 'user.email', 't@t'); G('config', 'core.autocrlf', 'false');
+    fs.writeFileSync(path.join(root, 'a.txt'), 'one\n'); fs.writeFileSync(path.join(root, 'b.txt'), 'bee\n');
+    G('add', '-A'); G('commit', '-q', '-m', 'init');
+    const inRepo = (args) => spawnSync(process.execPath, [BIN, ...args], { cwd: root, encoding: 'utf8', env: { ...process.env, WRAPPER_ROOT: root, MAIN: root } });
+
+    // 1) agent edits b.txt only, in its worktree: main checkout is untouched, merge is clean
+    const script1 = "require('fs').writeFileSync('b.txt','agent b');require('fs').writeFileSync('.env','S=1')";
+    const r1 = inRepo(['run', 'codex', '--isolate', '--', process.execPath, '-e', script1]);
+    assert.equal(r1.status, 0, r1.stderr);
+    assert.match(r1.stdout, /isolated: codex runs in its own worktree on branch wrapper\/codex/);
+    assert.equal(fs.readFileSync(path.join(root, 'b.txt'), 'utf8'), 'bee\n', 'main checkout is untouched while the agent works');
+    assert.match(r1.stdout, /1 file\(s\) saved on branch wrapper\/codex/);
+    assert.doesNotMatch(G('ls-tree', '-r', '--name-only', 'wrapper/codex'), /\.env/, 'secrets are never committed');
+    assert.match(G('worktree', 'list'), /^[^\n]*$/, 'worktree removed after the run');
+    const m = inRepo(['integrate', 'wrapper/codex']);
+    assert.equal(m.status, 0, m.stderr + m.stdout);
+    assert.equal(fs.readFileSync(path.join(root, 'b.txt'), 'utf8'), 'agent b');
+
+    // 2) agent edits a.txt while main commits a conflicting change: warned, integrate aborts and changes nothing
+    const script2 = "const fs=require('fs');fs.writeFileSync('a.txt','agent a');fs.writeFileSync(process.env.MAIN+'/a.txt','main a');require('child_process').execSync('git commit -q -am main-change',{cwd:process.env.MAIN})";
+    const r2 = inRepo(['run', 'opencode', '--isolate', '--', process.execPath, '-e', script2]);
+    assert.equal(r2.status, 0, r2.stderr);
+    assert.match(r2.stdout, /WARNING: 1 of these also changed on the main checkout.*a\.txt/);
+    const c = inRepo(['integrate', 'wrapper/opencode']);
+    assert.equal(c.status, 1);
+    assert.match(c.stdout, /conflicting files:\s+a\.txt/);
+    assert.equal(fs.readFileSync(path.join(root, 'a.txt'), 'utf8'), 'main a', 'abort leaves the main checkout as it was');
+    assert.equal(G('status', '--porcelain', '--untracked-files=no'), '');
+  } finally { cleanup(root); }
+});
+
+test('run --isolate outside a git repo fails closed instead of running unprotected', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-iso-'));
+  try {
+    const r = spawnSync(process.execPath, [BIN, 'run', 'codex', '--isolate', '--', process.execPath, '-e', "require('fs').writeFileSync('ran.txt','x')"], { cwd: root, encoding: 'utf8', env: { ...process.env, WRAPPER_ROOT: root } });
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /Not starting the tool unprotected/);
+    assert.equal(fs.existsSync(path.join(root, 'ran.txt')), false, 'the tool never ran');
+  } finally { cleanup(root); }
+});

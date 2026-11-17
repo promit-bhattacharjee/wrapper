@@ -18,4 +18,4 @@ Two paths work for every tool:
 Every session started through `session` or `run` gets the background **pulse**: it keeps the session alive, watches the workspace, and attributes each file change to the session holding the claim (ambiguous changes are logged as untracked, never guessed). `wrapper run` adds a **monitor report** on exit: files changed during the run, claims held, unread messages, and files edited without a claim.
 
 ## Limits
-Only Claude Code can have an edit refused before it happens. For other tools the monitor tells you afterwards.
+Only Claude Code can have an edit refused before it happens. For every other tool, `wrapper run <tool> --isolate -- <command>` gives real collision prevention: the tool works in its own git worktree and branch, so it physically cannot overwrite another agent's files. Conflicts appear at `wrapper integrate` time. Without `--isolate`, the monitor only tells you afterwards.

@@ -104,6 +104,14 @@ node bin/wrapper.mjs doctor
 ```
 Read-only check of Node and `node:sqlite`, the board, the pulse, Claude Code hooks, the pre-commit check and instruction files. Every problem comes with the command that fixes it (`--json` for scripts, exit code 1 on failure).
 
+### Collision-proof mode for any tool: `--isolate`
+```bash
+cd my-repo
+node bin/wrapper.mjs run codex --isolate -- codex     # Codex works in its own worktree + branch
+node bin/wrapper.mjs integrate wrapper/codex          # when ready: merge it (aborts cleanly on conflict)
+```
+The tool cannot overwrite other agents' files because it is not editing the same files: it works in a private worktree under `.wrapper/worktrees/`. When it exits, wrapper commits its work to `wrapper/<id>` (secrets like `.env` are never committed), warns about files that also changed on your main checkout, and removes the worktree. Nothing is pushed and your main checkout is not touched until you run `integrate`. If isolation cannot be set up (not a git repo, no commits), `run` stops instead of running the tool unprotected.
+
 ### Works with every tool
 ```bash
 node bin/wrapper.mjs run codex -- codex          # Codex, OpenCode, Command Code, or any CLI agent
@@ -189,7 +197,8 @@ tests/            node test suites
 ```
 
 ## Limits (read before you rely on it)
-- **Hard blocking works in Claude Code only.** Other tools follow `rules/AGENTS.md` voluntarily; `pm audit` can check their work afterwards but cannot stop an edit.
+- **Edit refusal before it happens works in Claude Code only.** For other tools, use `run --isolate` (each agent gets its own git worktree, so it cannot overwrite another agent's files; collisions show up at merge time). Without `--isolate` they follow `rules/AGENTS.md` voluntarily and wrapper reports afterwards.
+- `--isolate` needs a git repo with at least one commit, and two agents that change the same file still produce a merge conflict you resolve.
 - Reputation weights and thresholds are untuned defaults from a single workspace. Treat scores as a signal, not a verdict.
 - Some v4 pieces (automatic test-per-function and doc-update hooks) are still manual.
 - Developed and used on Windows; CI runs Linux and Windows on Node 22.13 and 24.

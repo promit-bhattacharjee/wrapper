@@ -17,6 +17,8 @@
 //  Setup         setup [dir]           one-command install: Claude Code hooks + git pre-commit check (dir defaults to the workspace root)
 //                install-hooks [dir] [--local]      pulse start|stop|status
 //  Any tool      run <tool> [--task ".."] -- <command...>   launch any agent CLI on the board: joins, sets $WRAPPER_AGENT, ends + checkpoints on exit
+//                run ... --isolate     run the tool in its own git worktree/branch: it cannot overwrite other agents' files
+//                integrate <branch|id> merge an isolated branch into the current branch (aborts cleanly on conflict)
 //                adapt <tool> [dir]    write that tool's instruction file (codex|opencode|commandcode|antigravity|claude|<any>)
 //  File memory   where "<keywords>"   find files by what they do (keywords + one line each)     who <path>   tasks/agents that touched it
 //                map scan [dir] [--limit N]    index keywords for existing files in one pass (day-one memory)
@@ -36,6 +38,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ADAPTERS, adapt } from '../lib/adapters.mjs';
 import * as filemap from '../lib/filemap.mjs';
+import { startIsolation, finishIsolation, integrate } from '../lib/isolate.mjs';
 
 const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number);
 if (NODE_MAJOR < 22 || (NODE_MAJOR === 22 && NODE_MINOR < 13)) {
@@ -440,7 +443,7 @@ function checkpointCmd(pos, flags) {
 // ---------- CLI ----------
 const BOOL = new Set([
   'ask', 'json', 'peek', 'quiet', 'local', 'no-pulse', 'apply', 'all',
-  'copilot', 'compact', 'raw', 'fast-lane', 'ceo-confirmed', 'force', 'expand', 'no-staff', 'worktrees', 'reject', 'reset',
+  'copilot', 'compact', 'raw', 'fast-lane', 'ceo-confirmed', 'force', 'expand', 'no-staff', 'worktrees', 'reject', 'reset', 'isolate',
 ]);
 const V4_CMDS = new Set([
   'init', 're', 'spec', 'taste', 'deploy', 'hr', 'pm', 'monitor',
@@ -606,6 +609,12 @@ function cli(argv) {
       return;
     }
     case 'run': return runTool(pos, flags, argv);
+    case 'integrate': {
+      const r = integrate(process.cwd(), pos[0] || die('Usage: integrate <wrapper/branch|agent-id>   (run inside the repo)'));
+      if (r.ok) return console.log(`merged ${r.branch} into the current branch of ${r.top}. Delete it with: git branch -d ${r.branch}`);
+      if (r.conflicts?.length) console.log('conflicting files:\n  ' + r.conflicts.join('\n  '));
+      return die(`integrate: ${r.err}`, 1);
+    }
     case 'where': {
       const q = pos.join(' ') || die('Usage: where "<keywords>"   e.g. where "refund cap"');
       const hits = filemap.where(ROOT, q, Number(flags.n) || 5);
@@ -886,12 +895,29 @@ function runTool(pos, flags, argv) {
   process.stdout.write(s.stdout);
   const id = (s.stdout.match(/SESSION_ID=(\S+)/) || [])[1];
   if (!id) die('wrapper run: no SESSION_ID returned');
+  let iso = null;
+  if (flags.isolate) {
+    const r = startIsolation(process.cwd(), id);
+    if (r.ok) { iso = r; console.log(`isolated: ${tool} runs in its own worktree on branch ${r.branch}\n  ${r.wt}`); }
+    else if (r.skip) console.log(`isolation not needed: ${r.err}`);
+    else { spawnSync(process.execPath, [SELF, 'end', '--as', id], { stdio: 'ignore', env: process.env }); die(`wrapper run --isolate: ${r.err}. Not starting the tool unprotected.`); }
+  }
   const since = readBoard().seq;
   const before = snapshotFiles();
   // Windows needs a shell to launch npm .cmd shims, and shell:true joins args unquoted, so quote them here.
   const q = (a) => (process.platform === 'win32' && /[\s"&|<>^()]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
-  const child = spawnSync(q(cmd[0]), cmd.slice(1).map(q), { stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, WRAPPER_AGENT: id, WRAPPER_ROOT: ROOT } });
-  monitorReport(id, since, diffSnapshots(before, snapshotFiles()));
+  const child = spawnSync(q(cmd[0]), cmd.slice(1).map(q), { stdio: 'inherit', shell: process.platform === 'win32', cwd: iso ? iso.cwd : process.cwd(), env: { ...process.env, WRAPPER_AGENT: id, WRAPPER_ROOT: ROOT, ...(iso ? { WRAPPER_ISOLATED: '1' } : {}) } });
+  const done = iso ? finishIsolation(iso, id) : null;
+  monitorReport(id, since, done ? done.files : diffSnapshots(before, snapshotFiles()));
+  if (done) {
+    console.log('--- isolation ---');
+    if (!done.kept) console.log('no changes, worktree and branch removed');
+    else {
+      console.log(`${done.files.length} file(s) saved on branch ${done.branch}${done.committed ? '' : ' (nothing new to commit)'}, main checkout untouched`);
+      if (done.overlap.length) console.log(`  WARNING: ${done.overlap.length} of these also changed on the main checkout since the run started (expect a merge conflict): ${done.overlap.slice(0, 6).join(', ')}`);
+      console.log(`  merge when ready: ${CLI} integrate ${done.branch}`);
+    }
+  }
   spawnSync(process.execPath, [SELF, 'end', '--as', id], { stdio: 'inherit', env: process.env });
   process.exit(child.status ?? 0);
 }
