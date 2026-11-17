@@ -2,7 +2,7 @@
 name: "wrapper"
 description: "Multi-agent coordination & Virtual Software Company engine (v4.2) for Claude Code, Antigravity, Command Code, ChatGPT/Codex, and OpenCode. Preserves the v3 live session board (.agents/coord/board.json) AND adds the v4.2 three-directory machine-compact engine (.wrapper/{docs,agents,track}) with living functional specs, preloaded RE/HR/PM skills, >=80% capability matching, Blind TDD, hash-locked test receipts, reputation points/lies, and cross-tool PM monitoring."
 argument-hint: "Command or SpecKit phase (init, re, hr, pm, desk, test, submit, verify, inspect, scoreboard, specify, plan, implement)"
-compatibility: "Node >= 22.5 (uses built-in node:sqlite WAL, zero external npm dependencies)"
+compatibility: "Node >= 22.13 (uses built-in node:sqlite WAL, zero external npm dependencies)"
 metadata:
   author: "Darun Tech Private Limited"
   source: "plugins/wrapper"

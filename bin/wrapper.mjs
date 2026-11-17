@@ -32,8 +32,8 @@ import { fileURLToPath } from 'node:url';
 import { ADAPTERS, adapt } from '../lib/adapters.mjs';
 
 const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number);
-if (NODE_MAJOR < 22 || (NODE_MAJOR === 22 && NODE_MINOR < 5)) {
-  console.error(`wrapper needs Node >= 22.5 (found ${process.versions.node}); it uses the built-in node:sqlite.`);
+if (NODE_MAJOR < 22 || (NODE_MAJOR === 22 && NODE_MINOR < 13)) {
+  console.error(`wrapper needs Node >= 22.13 (found ${process.versions.node}); it uses the built-in node:sqlite.`);
   process.exit(1);
 }
 

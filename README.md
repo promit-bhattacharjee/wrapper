@@ -1,12 +1,12 @@
 # wrapper
 
-[![test](https://github.com/promit-bhattacharjee/wrapper/actions/workflows/test.yml/badge.svg)](https://github.com/promit-bhattacharjee/wrapper/actions/workflows/test.yml) ![license](https://img.shields.io/badge/license-Apache--2.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22.5-green)
+[![test](https://github.com/promit-bhattacharjee/wrapper/actions/workflows/test.yml/badge.svg)](https://github.com/promit-bhattacharjee/wrapper/actions/workflows/test.yml) ![license](https://img.shields.io/badge/license-Apache--2.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22.13-green)
 
 **One shared board for every AI coding agent you run.**
 
 You open Claude Code in one terminal, Antigravity in another, maybe Command Code or OpenCode in a third. They all edit the same workspace, and none of them knows the others exist. `wrapper` fixes that: they see each other, claim files, message each other, and hand work off, with no server and no dependencies.
 
-- Zero npm dependencies, plain Node (`>= 22.5`, uses the built-in `node:sqlite`)
+- Zero npm dependencies, plain Node (`>= 22.13`, uses the built-in `node:sqlite`)
 - State is local files. You can read it by just opening `LIVE.md`
 - Works with Claude Code, Antigravity, Command Code, OpenCode, ChatGPT/Codex, or any tool that can run a shell command
 
@@ -16,7 +16,7 @@ You open Claude Code in one terminal, Antigravity in another, maybe Command Code
 
 ## Quick start
 
-Requires Node >= 22.5 (`node --version`).
+Requires Node >= 22.13 (`node --version`).
 
 ```bash
 cd your-project
@@ -173,7 +173,7 @@ tests/            node test suites
 - **Hard blocking works in Claude Code only.** Other tools follow `rules/AGENTS.md` voluntarily; `pm audit` can check their work afterwards but cannot stop an edit.
 - Reputation weights and thresholds are untuned defaults from a single workspace. Treat scores as a signal, not a verdict.
 - Some v4 pieces (automatic test-per-function and doc-update hooks) are still manual.
-- Developed and used on Windows; CI runs Linux and Windows on Node 22.5 and 24.
+- Developed and used on Windows; CI runs Linux and Windows on Node 22.13 and 24.
 
 ## Status
 Working and used daily by its author. Issues and PRs welcome, especially from people running it on other setups.
