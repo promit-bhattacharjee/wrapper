@@ -112,6 +112,14 @@ node bin/wrapper.mjs integrate wrapper/codex          # when ready: merge it (ab
 ```
 The tool cannot overwrite other agents' files because it is not editing the same files: it works in a private worktree under `.wrapper/worktrees/`. When it exits, wrapper commits its work to `wrapper/<id>` (secrets like `.env` are never committed), warns about files that also changed on your main checkout, and removes the worktree. Nothing is pushed and your main checkout is not touched until you run `integrate`. If isolation cannot be set up (not a git repo, no commits), `run` stops instead of running the tool unprotected.
 
+Make it the default so you never forget the flag, and give the worktree what it needs to run:
+```bash
+node bin/wrapper.mjs config set isolate always   # opt out per launch with --no-isolate
+node bin/wrapper.mjs config set copy .env        # copied into the worktree, never committed
+node bin/wrapper.mjs aliases                     # shell functions so plain `codex` / `opencode` go through wrapper
+```
+`node_modules` is linked into the worktree automatically (your real folder is never deleted or modified). Settings live in `wrapper.config.json`.
+
 ### Works with every tool
 ```bash
 node bin/wrapper.mjs run codex -- codex          # Codex, OpenCode, Command Code, or any CLI agent

@@ -18,6 +18,8 @@
 //                install-hooks [dir] [--local]      pulse start|stop|status
 //  Any tool      run <tool> [--task ".."] -- <command...>   launch any agent CLI on the board: joins, sets $WRAPPER_AGENT, ends + checkpoints on exit
 //                run ... --isolate     run the tool in its own git worktree/branch: it cannot overwrite other agents' files
+//                run ... --link a,b --copy .env --no-isolate    link deps / copy local config into the worktree; opt out when isolation is the default
+//                config [set isolate always|off | set link a,b | set copy .env]   settings in wrapper.config.json     aliases [--shell pwsh|bash]
 //                integrate <branch|id> merge an isolated branch into the current branch (aborts cleanly on conflict)
 //                adapt <tool> [dir]    write that tool's instruction file (codex|opencode|commandcode|antigravity|claude|<any>)
 //  File memory   where "<keywords>"   find files by what they do (keywords + one line each)     who <path>   tasks/agents that touched it
@@ -39,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 import { ADAPTERS, adapt } from '../lib/adapters.mjs';
 import * as filemap from '../lib/filemap.mjs';
 import { startIsolation, finishIsolation, integrate } from '../lib/isolate.mjs';
+import { loadConfig, setConfig, aliasSnippet } from '../lib/config.mjs';
 
 const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number);
 if (NODE_MAJOR < 22 || (NODE_MAJOR === 22 && NODE_MINOR < 13)) {
@@ -443,7 +446,7 @@ function checkpointCmd(pos, flags) {
 // ---------- CLI ----------
 const BOOL = new Set([
   'ask', 'json', 'peek', 'quiet', 'local', 'no-pulse', 'apply', 'all',
-  'copilot', 'compact', 'raw', 'fast-lane', 'ceo-confirmed', 'force', 'expand', 'no-staff', 'worktrees', 'reject', 'reset', 'isolate',
+  'copilot', 'compact', 'raw', 'fast-lane', 'ceo-confirmed', 'force', 'expand', 'no-staff', 'worktrees', 'reject', 'reset', 'isolate', 'no-isolate',
 ]);
 const V4_CMDS = new Set([
   'init', 're', 'spec', 'taste', 'deploy', 'hr', 'pm', 'monitor',
@@ -609,6 +612,18 @@ function cli(argv) {
       return;
     }
     case 'run': return runTool(pos, flags, argv);
+    case 'config': {
+      if (pos[0] === 'set') {
+        const r = setConfig(ROOT, pos[1], pos.slice(2).join(' '));
+        return r.ok ? console.log(`saved in ${r.file}`) : die(`config: ${r.err}`);
+      }
+      return console.log(JSON.stringify(loadConfig(ROOT), null, 2) + '\n(change with: config set isolate always|off, config set link node_modules, config set copy .env)');
+    }
+    case 'aliases': {
+      const shell = str(flags.shell) || (process.platform === 'win32' ? 'pwsh' : 'bash');
+      console.log(`# Add to your ${shell === 'pwsh' ? 'PowerShell $PROFILE' : '~/.bashrc or ~/.zshrc'} so every agent CLI starts on the wrapper board:`);
+      return console.log(aliasSnippet(shell, SELF));
+    }
     case 'integrate': {
       const r = integrate(process.cwd(), pos[0] || die('Usage: integrate <wrapper/branch|agent-id>   (run inside the repo)'));
       if (r.ok) return console.log(`merged ${r.branch} into the current branch of ${r.top}. Delete it with: git branch -d ${r.branch}`);
@@ -896,11 +911,19 @@ function runTool(pos, flags, argv) {
   const id = (s.stdout.match(/SESSION_ID=(\S+)/) || [])[1];
   if (!id) die('wrapper run: no SESSION_ID returned');
   let iso = null;
-  if (flags.isolate) {
-    const r = startIsolation(process.cwd(), id);
-    if (r.ok) { iso = r; console.log(`isolated: ${tool} runs in its own worktree on branch ${r.branch}\n  ${r.wt}`); }
-    else if (r.skip) console.log(`isolation not needed: ${r.err}`);
-    else { spawnSync(process.execPath, [SELF, 'end', '--as', id], { stdio: 'ignore', env: process.env }); die(`wrapper run --isolate: ${r.err}. Not starting the tool unprotected.`); }
+  const cfg = loadConfig(ROOT);
+  const explicit = !!flags.isolate;
+  if (explicit || (cfg.isolate === 'always' && !flags['no-isolate'])) {
+    const csv = (v) => (str(v) ? str(v).split(',').map((x) => x.trim()).filter(Boolean) : null);
+    const r = startIsolation(process.cwd(), id, { link: csv(flags.link) ?? cfg.link, copy: csv(flags.copy) ?? cfg.copy });
+    if (r.ok) {
+      iso = r;
+      console.log(`isolated: ${tool} runs in its own worktree on branch ${r.branch}${explicit ? '' : ' (default from wrapper.config.json)'}\n  ${r.wt}`);
+      if (r.linked.length) console.log(`  linked from the main checkout: ${r.linked.join(', ')}`);
+      if (r.copied.length) console.log(`  copied (never committed): ${r.copied.join(', ')}`);
+    } else if (r.skip) console.log(`isolation not needed: ${r.err}`);
+    else if (explicit) { spawnSync(process.execPath, [SELF, 'end', '--as', id], { stdio: 'ignore', env: process.env }); die(`wrapper run --isolate: ${r.err}. Not starting the tool unprotected.`); }
+    else console.log(`WARNING: default isolation skipped, ${tool} runs WITHOUT protection: ${r.err}`);
   }
   const since = readBoard().seq;
   const before = snapshotFiles();

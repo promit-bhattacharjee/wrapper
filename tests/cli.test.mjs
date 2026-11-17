@@ -188,3 +188,40 @@ test('run --isolate outside a git repo fails closed instead of running unprotect
     assert.equal(fs.existsSync(path.join(root, 'ran.txt')), false, 'the tool never ran');
   } finally { cleanup(root); }
 });
+
+test('isolation: node_modules is linked in and survives cleanup, .env is copied but never committed, default-on config works, --no-isolate opts out', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-iso2-'));
+  try {
+    const G = (...a) => { const r = spawnSync('git', a, { cwd: root, encoding: 'utf8' }); assert.equal(r.status, 0, `git ${a.join(' ')}: ${r.stderr}`); return r.stdout.trim(); };
+    G('init', '-q', '-b', 'main'); G('config', 'user.name', 't'); G('config', 'user.email', 't@t'); G('config', 'core.autocrlf', 'false');
+    fs.writeFileSync(path.join(root, 'a.txt'), 'one');
+    fs.mkdirSync(path.join(root, 'node_modules', 'pkg'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'node_modules', 'pkg', 'index.js'), 'real dep');
+    fs.writeFileSync(path.join(root, '.env'), 'SECRET=1');
+    G('add', 'a.txt'); G('commit', '-q', '-m', 'init');
+    const inRepo = (args) => spawnSync(process.execPath, [BIN, ...args], { cwd: root, encoding: 'utf8', env: { ...process.env, WRAPPER_ROOT: root } });
+
+    assert.equal(inRepo(['config', 'set', 'isolate', 'always']).status, 0);
+    assert.equal(inRepo(['config', 'set', 'copy', '.env']).status, 0);
+    const script = "const fs=require('fs');console.log('DEP='+fs.readFileSync('node_modules/pkg/index.js','utf8'));fs.writeFileSync('a.txt','agent');fs.writeFileSync('.env','CHANGED')";
+    const r = inRepo(['run', 'codex', '--', process.execPath, '-e', script]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /\(default from wrapper\.config\.json\)/);
+    assert.match(r.stdout, /DEP=real dep/, 'agent can use the linked dependencies');
+    assert.equal(fs.readFileSync(path.join(root, 'node_modules', 'pkg', 'index.js'), 'utf8'), 'real dep', 'cleanup must never delete the real node_modules');
+    assert.equal(fs.readFileSync(path.join(root, '.env'), 'utf8'), 'SECRET=1', 'main .env untouched');
+    assert.equal(G('ls-tree', '-r', '--name-only', 'wrapper/codex'), 'a.txt', 'neither .env nor node_modules is committed');
+
+    const o = inRepo(['run', 'codex', '--no-isolate', '--', process.execPath, '-e', "console.log('plain')"]);
+    assert.doesNotMatch(o.stdout, /isolated:/);
+  } finally { cleanup(root); }
+});
+
+test('config rejects bad values; aliases prints a function per tool', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-cfg-'));
+  try {
+    assert.notEqual(run(['config', 'set', 'isolate', 'maybe'], root).status, 0);
+    assert.notEqual(run(['config', 'set', 'nonsense', 'x'], root).status, 0);
+    assert.match(run(['aliases', '--shell', 'bash'], root).stdout, /codex\(\) \{ node ".*" run codex -- command codex/);
+  } finally { cleanup(root); }
+});
