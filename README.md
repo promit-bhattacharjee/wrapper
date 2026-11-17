@@ -1,162 +1,128 @@
-# Wrapper (v4.2)
+# wrapper
 
-> **Multi-Agent Coordination & Virtual Software Company Engine**  
-> *Built for Claude Code, Antigravity, ChatGPT/Codex, Command Code, and OpenCode.*
+**One shared board for every AI coding agent you run.**
 
-Wrapper is a dependency-free, high-accuracy, low-token coordination engine and virtual software company runtime. It allows multiple AI coding agents from different vendors and CLIs to collaborate concurrently in the same workspace without collisions, duplicate work, hallucinated context, or fabricated test claims.
+You open Claude Code in one terminal, Antigravity in another, maybe Command Code or OpenCode in a third. They all edit the same workspace, and none of them knows the others exist. `wrapper` fixes that: they see each other, claim files, message each other, and hand work off, with no server and no dependencies.
 
----
+- Zero npm dependencies, plain Node (`>= 22.5`, uses the built-in `node:sqlite`)
+- State is local files. You can read it by just opening `LIVE.md`
+- Works with Claude Code, Antigravity, Command Code, OpenCode, ChatGPT/Codex, or any tool that can run a shell command
 
-## Key Highlights
-
-- **Zero External Dependencies**: Built entirely with Node.js built-ins (`node:sqlite` in WAL mode, `node:fs`, `node:crypto`, `node:child_process`, `node:util`).
-- **Living Functional Specifications**: Replaces sprawling folder hierarchies with single-file, living atomic EARS specifications (`<feature>.spec.jsonl` + `<feature>.meta.json`) evolved in-place.
-- **Symbol Interning (`_sym.json`)**: Compresses file paths and symbols on disk to save 68–75% tokens, while **automatically expanding** them back to real paths at prompt-injection time to eliminate hallucinated IDs.
-- **Virtual Software Company & HR Matcher**: Preloaded founding staff (`emp-re` Requirement Engineer & `emp-hr` Human Resources) match requirements against employee profiles using a deterministic $\ge 80\%$ capability + XP score or hire human-named specialist archetypes (PM, Sigma-Designer, ECA-L3/L2/L1, QA, Maintenance).
-- **Reputation Ledger & Anti-Lie Enforcement**: Agents start with $100$ points. Wins add $+5$, blind tests $+3$, bugs $-15$, and lies $-25$ to $-30$. Falling below $90$ triggers Probation; falling below $65$ or accumulating $2$ lies triggers Termination. Blunders are automatically copied into the squad's permanent `never_do[]` memory.
-- **Blind TDD**: QA specialists author and lock failing tests first. Implementing engineers are mechanically blocked from tampering with locked test files.
-- **Hash-Locked Execution Receipts**: `wrapper test` cryptographically binds the git working-tree hash, command stdout hash, and exit code into a tamper-evident receipt. Editing files after running a test invalidates the receipt (`LIE_FABRICATED`).
-- **Cross-Tool PM Watchtower**: Monitors Claude Code (via native hooks), Antigravity (via CLI pulse), and external tools like ChatGPT/Codex (via worktree isolation and git audits).
+> Built for my own daily workflow (4-5 agents in parallel across a multi-repo workspace). Open-sourced because the "agents stepping on each other" problem is not unique to me.
 
 ---
 
-## Architecture: The 3-Directory State Engine (`.wrapper/`)
+## What it does
 
-When initialized in a project repository (`wrapper init --dir <repo>`), Wrapper creates three machine-compact directories:
-
-```text
-<repo>/.wrapper/
-├── docs/                      # Directory 1: Living Documentation
-│   ├── specs/                 # Living atomic EARS specs (<feat>.spec.jsonl + <feat>.meta.json)
-│   ├── _sym.json              # Interned symbols & paths dictionary (saves 70% tokens)
-│   ├── taste.jsonl            # CEO preferences & guidelines (.taste hook store)
-│   └── deploy.json            # Two-way deployment links & verified spec status
-├── agents/                    # Directory 2: Virtual Corporate Office & HR
-│   ├── roster/                # Individual employee cards (<emp-id>.json)
-│   ├── teams.jsonl            # Squad definitions, active leads, and team never_do[] rules
-│   └── ledger/                # Append-only reputation point ledger (<emp-id>.jsonl)
-└── track/                     # Directory 3: Task Execution & ACID SQLite Concurrency
-    ├── track.db               # SQLite WAL store (spec_matrix, desks, file_leases, receipts, telemetry)
-    ├── receipts.jsonl         # Append-only hash-locked execution receipts
-    └── runs/                  # Per-agent WAL execution history
-```
-
----
-
-## Human-Readable Decoder
-
-Everything inside `.wrapper/` is machine-compact JSON/JSONL and SQLite to minimize token overhead. Humans and LLMs can inspect any aspect in clear, decorated markdown at zero prompt penalty:
+### 1. Live session board (cross-IDE awareness)
+Every agent joins the board. Each can see who else is active, what they are working on, and which files they hold.
 
 ```bash
-# Decode entire repository status
-node bin/wrapper.mjs inspect all --dir .
-
-# Inspect specific submodules
-node bin/wrapper.mjs inspect spec --dir .
-node bin/wrapper.mjs inspect roster --dir .
-node bin/wrapper.mjs inspect teams --dir .
-node bin/wrapper.mjs inspect matrix --dir .
-node bin/wrapper.mjs scoreboard --dir .
+node bin/wrapper.mjs session --tool antigravity --task "build login page"   # join
+node bin/wrapper.mjs sync --as <id>      # heartbeat + new messages + what others changed
+node bin/wrapper.mjs status              # full briefing
+node bin/wrapper.mjs watch --as <id>     # live tail in its own terminal
 ```
 
----
+`.agents/coord/LIVE.md` is an auto-refreshed, read-only view any tool can open.
 
-## Core Workflows
+### 2. Agent-to-agent messaging
+Send a message to one session, to every session of one tool, to a domain specialist, or to everyone.
 
-### 1. Living Specifications & CEO Preferences
 ```bash
-# Initialize living feature metadata (intent, scope radius)
-node bin/wrapper.mjs re meta --feat checkout --goal "Atomic checkout flow" --own "sale/checkout.mjs"
-
-# Upsert an atomic EARS requirement into the living spec
-node bin/wrapper.mjs re upsert --feat checkout --id CK-01 --slice core \
-  --when "calcTotal(price, qty)" --do "return price * qty; throw RangeError on negative qty" \
-  --files "sale/checkout.mjs"
-
-# Inspect surgical prompt slice with interned symbols expanded
-node bin/wrapper.mjs re slice --feat checkout --req CK-01
+node bin/wrapper.mjs send --to antigravity "I changed the order API, rebase on it" --as <id> --ask
+node bin/wrapper.mjs inbox --as <id>
 ```
 
-### 2. HR Matching & Specialist Recruitment
+In Claude Code, messages are injected automatically after each tool call, and a direct message blocks the agent from finishing until it has read it.
+
+### 3. Tasks and file claims (no more collisions)
 ```bash
-# Evaluate requisition against roster (reuses employee at >= 80% match, or pauses for CEO clarification)
-node bin/wrapper.mjs hr match --role eng --level L3 --domain checkout --tech node,javascript --files sale/checkout.mjs --ceo-confirmed
-
-# List active staff and reputation standings
-node bin/wrapper.mjs hr roster
+node bin/wrapper.mjs task add "fix refund cap" --service restaurant_backend --as <id>
+node bin/wrapper.mjs task claim T-12 --as <id>
+node bin/wrapper.mjs claim src/orders/ --as <id>      # exit 2 if another live agent holds it
+node bin/wrapper.mjs task done T-12 --as <id> --note "what changed, how verified"
 ```
+Sessions that go silent for 20 minutes are dropped, their file claims released and their in-progress tasks reopened.
 
-### 3. Disjoint-File Scheduling & Blind TDD
-```bash
-# Partition requirements into file-disjoint parallel waves
-node bin/wrapper.mjs pm schedule --feat checkout --tech node --level L2
+### 4. Automatic for Claude Code (hooks)
+One command installs hooks that handle session start, heartbeat, message delivery and file claims on their own. A `PreToolUse` hook claims files and asks you when there is a conflict or an out-of-scope edit.
 
-# QA authors and read-only locks the blind acceptance test
-node bin/wrapper.mjs blind-test --qa emp-003 --task TK-CK-01 --test tests/checkout.test.mjs
-
-# Engineer runs tests and produces tamper-evident execution receipt
-node bin/wrapper.mjs test --emp emp-002 --task TK-CK-01 --cmd "node --test tests/checkout.test.mjs"
-
-# Submit completed task with receipt (validates tree hash, zero assertion deletions, no skip tags)
-node bin/wrapper.mjs submit --emp emp-002 --task TK-CK-01
-
-# Independent QA / PM verification (self-verification is mechanically rejected)
-node bin/wrapper.mjs verify --by emp-003 --task TK-CK-01
-```
-
-### 4. Token-Capped Discussion Rooms
-```bash
-# Open a huddle room for architectural coordination
-node bin/wrapper.mjs room open --topic "Checkout schema migration" --feat checkout --chair emp-pm
-
-# Post turns (strictly capped at 280 characters to prevent prose bloat)
-node bin/wrapper.mjs room say --room RM-001 --emp emp-002 --kind propose --body "Add currency_code VARCHAR(3) NOT NULL default 'BDT'."
-node bin/wrapper.mjs room say --room RM-001 --emp emp-003 --kind agree --body "Approved. Blind tests updated."
-
-# Close room with resolution
-node bin/wrapper.mjs room close --room RM-001 --resolution "currency_code column approved"
-```
-
----
-
-## Cross-Tool Integration
-
-### Claude Code
-Install hooks with a single command:
 ```bash
 node bin/wrapper.mjs install-hooks <repo-dir> --local
 ```
-- **`PreToolUse`**: Enforces file leases, blocks edits by terminated agents, prevents tampering with locked blind tests (`LIE_TEST_TAMPER`), and flags out-of-radius drift.
-- **`UserPromptSubmit`**: Captures CEO taste preferences into `taste.jsonl` (with automatic secret value filtering).
-- **`Stop` / `SessionEnd`**: Blocks completion until pending cross-agent messages are addressed.
 
-### Antigravity & Other Agents
+### 5. Background pulse for tools without hooks
+A single detached process per workspace keeps hook-less sessions alive, watches the filesystem, and attributes each change to whoever holds the claim. Ambiguous changes are logged as "untracked" instead of guessed.
+
+### 6. Domain agents: dispatch, don't duplicate
+Define specialists in `.specify/agents.json`. Any lead agent can hand work to them.
+
 ```bash
-# Start coordination session & background pulse
-node bin/wrapper.mjs session --tool antigravity --task "Implement checkout logic"
-
-# Sync turn updates and unread messages from other agents
-node bin/wrapper.mjs sync --as <session-id>
-
-# Claim task and advisory file leases
-node bin/wrapper.mjs task claim T-1 --as <session-id>
-node bin/wrapper.mjs claim sale/checkout.mjs --as <session-id>
+node bin/wrapper.mjs agents                                   # list specialists
+node bin/wrapper.mjs gen-agents                               # write Claude Code subagent files
+node bin/wrapper.mjs dispatch backend_order_agent "add refund endpoint" --as <id>
 ```
+`dispatch` creates a tagged task and prints a ready-to-paste brief (role, allowed paths, principles, drift guard) for any tool's subagent mechanism.
+
+### 7. Never lose work (checkpoints)
+When an agent ends, its changes are saved. In a git worktree it makes a commit of only that agent's files. In a shared checkout it writes a hidden snapshot ref (no branch, working tree or index change). Restore later with:
+
+```bash
+node bin/wrapper.mjs checkpoint restore <agent> --apply
+```
+Nothing is ever pushed.
+
+### 8. Warn-only pre-commit check
+`install-git-hook <repo-dir>` adds a hook that flags staged changes missing tests or manual notes. It prints warnings and never blocks a commit.
+
+### 9. Handoff between sessions
+`summary add "..."` and `handoff` produce `HANDOFF.md`, so the next session starts with what matters instead of from zero.
 
 ---
 
-## Testing
+## v4: the "virtual software company" engine
 
-Wrapper includes an end-to-end integration test suite exercising the 3-directory layout, symbol compression, HR candidate scoring, blind TDD locking, anti-lie gates, probation/termination, SQLite WAL concurrency, git blame defect clawback, and external agent worktree audits:
+Optional. `wrapper init --dir <repo>` creates a compact `.wrapper/{docs,agents,track}` state store.
 
-```bash
-npm test
-```
-
-All tests execute in temporary throwaway repositories under `os.tmpdir()` and never mutate existing project files.
+| Part | What you get |
+|---|---|
+| **Living specs** | One permanent spec per feature (requirement lines with trigger, invariant, error codes, blast-radius files) instead of throwaway numbered spec folders |
+| **Taste memory** | Your durable preferences are recorded once and the agents are told to flag requests that contradict them |
+| **Requirement Engineer + HR skills** | Interviews you on ambiguity; HR scores existing agents (capability, domain, past file experience, level, reputation) and reuses one at >= 0.80, otherwise hires a specialist |
+| **Wave scheduler** | Tasks that touch disjoint files run in parallel; tasks that share files are ordered automatically |
+| **Blind TDD** | QA locks a failing test first; the implementer is blocked from editing it |
+| **Hash-locked receipts** | `test` binds the git tree hash, exit code and output hash into a receipt; `submit` without a matching receipt counts as a fabricated claim |
+| **Independent verify** | The author cannot approve their own work |
+| **Reputation ledger** | Wins and "lies" are scored; repeat offenders go on probation, with blame traced through git |
+| **PM sitrep + scoreboard** | A report of real accuracy across Claude Code, Antigravity and Codex workers |
+| **Token-saving context** | Paths are interned on disk and expanded only when a prompt is built (`ctx`) |
 
 ---
+
+## Quick start
+
+```bash
+git clone <this-repo> .agents/plugins/wrapper
+node .agents/plugins/wrapper/bin/wrapper.mjs session --tool claude --task "my first task"
+node .agents/plugins/wrapper/bin/wrapper.mjs status
+```
+
+For Claude Code, then run `install-hooks` once. For every other tool, tell the agent to follow `rules/AGENTS.md` (join with `session`, run `sync` every turn).
+
+## Layout
+
+```
+bin/wrapper.mjs   CLI entry
+lib/              board, pulse, checkpoint, check, v4 engine (specs, HR, scheduler, tracking)
+rules/AGENTS.md   the protocol any agent follows
+skills/           wrapper, requirement-engineer, hr, pm-monitor
+presets/          roster archetypes and scoring weights
+tests/            node test suites
+```
+
+## Status
+Working and used daily by its author. Some v4 pieces (automatic test-per-function and doc-update hooks) are still manual. Issues and PRs welcome.
 
 ## License
-
-[Apache-2.0](LICENSE) © Darun Tech Private Limited
+Apache-2.0, see [LICENSE](LICENSE).
