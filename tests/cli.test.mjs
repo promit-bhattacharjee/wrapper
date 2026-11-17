@@ -51,3 +51,30 @@ test('adapt writes the instruction file for known and unknown tools, idempotentl
     assert.match(run(['adapt', 'antigravity', root], root).stdout, /GEMINI\.md/);
   } finally { cleanup(root); }
 });
+
+test('doctor: empty workspace has no failures, and it is read-only', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-doc-'));
+  try {
+    const r = run(['doctor', '--json'], root);
+    assert.equal(r.status, 0, r.stderr);
+    const res = JSON.parse(r.stdout);
+    assert.ok(res.length >= 8 && res.every((x) => x.status !== 'fail'));
+    assert.deepEqual(fs.readdirSync(root), [], 'doctor must not create files');
+  } finally { cleanup(root); }
+});
+
+test('doctor: reports corrupt board and stale hooks as failures with a fix, exit 1', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-doc-'));
+  try {
+    fs.mkdirSync(path.join(root, '.agents', 'coord'), { recursive: true });
+    fs.mkdirSync(path.join(root, '.claude'));
+    fs.writeFileSync(path.join(root, '.agents', 'coord', 'board.json'), '{not json');
+    const hook = { hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'node "/gone/wrapper.mjs" hook claude' }] }] } };
+    fs.writeFileSync(path.join(root, '.claude', 'settings.local.json'), JSON.stringify(hook));
+    const r = run(['doctor', '--json'], root);
+    assert.equal(r.status, 1);
+    const failed = JSON.parse(r.stdout).filter((x) => x.status === 'fail').map((x) => x.name);
+    assert.deepEqual(failed.sort(), ['Claude Code hooks', 'board.json']);
+    assert.ok(JSON.parse(r.stdout).filter((x) => x.status === 'fail').every((x) => x.fix));
+  } finally { cleanup(root); }
+});

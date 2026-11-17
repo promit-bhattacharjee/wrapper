@@ -18,6 +18,7 @@
 //                install-hooks [dir] [--local]      pulse start|stop|status
 //  Any tool      run <tool> [--task ".."] -- <command...>   launch any agent CLI on the board: joins, sets $WRAPPER_AGENT, ends + checkpoints on exit
 //                adapt <tool> [dir]    write that tool's instruction file (codex|opencode|commandcode|antigravity|claude|<any>)
+//  Health        doctor [--json]       read-only check (Node, sqlite, board, pulse, hooks, instruction files) with a fix for each problem
 //  Help          help | --help | -h     print this header
 //  Safety        checkpoint [--as ID]   save the agent's work when it ends (worktree: wip commit; shared checkout: hidden snapshot ref)
 //                checkpoint restore <agent> [--repo DIR] [--apply] [--all]    list / restore that agent's snapshot files
@@ -599,6 +600,11 @@ function cli(argv) {
       return;
     }
     case 'run': return runTool(pos, flags, argv);
+    case 'doctor': return void import('../lib/doctor.mjs').then(async (m) => {
+      const res = await m.runDoctor({ ROOT, COORD, BOARD, LOCK, SELF, CLI, STALE_MS, readBoard, pulsePid });
+      m.printDoctor(res, !!flags.json);
+      if (res.some((r) => r.status === 'fail')) process.exitCode = 1;
+    });
     case 'help': case '--help': case '-h': return printHelp();
     case 'hook': return hook(pos[0]);
     default: die(`Unknown command "${cmd}". See the header of ${SELF}.`);

@@ -85,6 +85,12 @@ node bin/wrapper.mjs dispatch backend_order_agent "add refund endpoint" --as <id
 ```
 `dispatch` creates a tagged task and prints a ready-to-paste brief (role, allowed paths, principles, drift guard) for any tool's subagent mechanism.
 
+### Something not working? Run the doctor
+```bash
+node bin/wrapper.mjs doctor
+```
+Read-only check of Node and `node:sqlite`, the board, the pulse, Claude Code hooks, the pre-commit check and instruction files. Every problem comes with the command that fixes it (`--json` for scripts, exit code 1 on failure).
+
 ### Works with every tool
 ```bash
 node bin/wrapper.mjs run codex -- codex          # Codex, OpenCode, Command Code, or any CLI agent
