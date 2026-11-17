@@ -14,7 +14,9 @@
 //                dispatch <domain-id> "task" --as ID     create tagged task + print ready-to-paste subagent prompt
 //                gen-agents [dir]       write Claude Code subagent files (.claude/agents/*.md) for all domain agents
 //  Memory        summary add|clear "text"     handoff (regenerate HANDOFF.md)
-//  Setup         install-hooks [dir] [--local]      pulse start|stop|status
+//  Setup         setup [dir]           one-command install: Claude Code hooks + git pre-commit check (dir defaults to the workspace root)
+//                install-hooks [dir] [--local]      pulse start|stop|status
+//  Help          help | --help | -h     print this header
 //  Safety        checkpoint [--as ID]   save the agent's work when it ends (worktree: wip commit; shared checkout: hidden snapshot ref)
 //                checkpoint restore <agent> [--repo DIR] [--apply] [--all]    list / restore that agent's snapshot files
 //                check                  warn-only staged-change check (tests / manual); install-git-hook <repo-dir> wires it into .git/hooks/pre-commit
@@ -26,8 +28,15 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number);
+if (NODE_MAJOR < 22 || (NODE_MAJOR === 22 && NODE_MINOR < 5)) {
+  console.error(`wrapper needs Node >= 22.5 (found ${process.versions.node}); it uses the built-in node:sqlite.`);
+  process.exit(1);
+}
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(HERE, '..', '..', '..', '..'); // bin -> wrapper -> plugins -> .agents -> root
+// Workspace root: WRAPPER_ROOT wins, else bin -> wrapper -> plugins -> .agents -> root (the documented install path).
+const ROOT = process.env.WRAPPER_ROOT ? path.resolve(process.env.WRAPPER_ROOT) : path.resolve(HERE, '..', '..', '..', '..');
 const COORD = path.join(ROOT, '.agents', 'coord');
 const BOARD = path.join(COORD, 'board.json');
 const LOCK = path.join(COORD, 'board.lock');
@@ -569,6 +578,16 @@ function cli(argv) {
       return void import('../lib/check.mjs').then((m) => { const r = m.installGitHook(dir, SELF); console.log(r.msg); if (!r.ok) process.exitCode = 1; });
     }
     case 'install-hooks': return installHooks(pos[0] || ROOT, !!flags.local);
+    case 'setup': {
+      const dir = path.resolve(pos[0] || ROOT);
+      installHooks(dir, true);
+      if (fs.existsSync(path.join(dir, '.git'))) {
+        return void import('../lib/check.mjs').then((m) => { const r = m.installGitHook(dir, SELF); console.log(r.msg); console.log('Setup done. Start an agent session with: ' + CLI + ' session --tool claude --task "..."'); });
+      }
+      console.log('No .git in ' + dir + ', skipped the pre-commit check. Setup done. Start an agent session with: ' + CLI + ' session --tool claude --task "..."');
+      return;
+    }
+    case 'help': case '--help': case '-h': return printHelp();
     case 'hook': return hook(pos[0]);
     default: die(`Unknown command "${cmd}". See the header of ${SELF}.`);
   }
@@ -785,6 +804,12 @@ async function hook(kind) {
   } catch (e) {
     process.stderr.write(`wrapper hook error (ignored): ${e.message}\n`);
   }
+}
+
+function printHelp() {
+  const lines = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/);
+  const head = lines.filter((l) => l.startsWith('//')).map((l) => l.replace(/^\/\/ ?/, ''));
+  console.log(head.join('\n'));
 }
 
 function installHooks(dir, local) {

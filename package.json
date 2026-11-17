@@ -9,7 +9,7 @@
     "wrapper": "./bin/wrapper.mjs"
   },
   "scripts": {
-    "test": "node --test tests/checkpoint.test.mjs tests/v4.test.mjs"
+    "test": "node --test tests/checkpoint.test.mjs tests/v4.test.mjs tests/cli.test.mjs"
   },
   "engines": {
     "node": ">=22.5"

@@ -1,5 +1,7 @@
 # wrapper
 
+[![test](https://github.com/promit-bhattacharjee/wrapper/actions/workflows/test.yml/badge.svg)](https://github.com/promit-bhattacharjee/wrapper/actions/workflows/test.yml) ![license](https://img.shields.io/badge/license-Apache--2.0-blue) ![node](https://img.shields.io/badge/node-%3E%3D22.5-green)
+
 **One shared board for every AI coding agent you run.**
 
 You open Claude Code in one terminal, Antigravity in another, maybe Command Code or OpenCode in a third. They all edit the same workspace, and none of them knows the others exist. `wrapper` fixes that: they see each other, claim files, message each other, and hand work off, with no server and no dependencies.
@@ -12,7 +14,25 @@ You open Claude Code in one terminal, Antigravity in another, maybe Command Code
 
 ---
 
-## What it does
+## Quick start
+
+Requires Node >= 22.5 (`node --version`).
+
+```bash
+cd your-project
+git clone https://github.com/promit-bhattacharjee/wrapper .agents/plugins/wrapper
+node .agents/plugins/wrapper/bin/wrapper.mjs setup          # Claude Code hooks + git pre-commit check
+node .agents/plugins/wrapper/bin/wrapper.mjs session --tool claude --task "my first task"
+node .agents/plugins/wrapper/bin/wrapper.mjs status         # or just open .agents/coord/LIVE.md
+```
+
+For Claude Code, `setup` is all you need. For every other tool, tell the agent to follow `rules/AGENTS.md` (join with `session`, run `sync` every turn).
+Installed somewhere else? Set `WRAPPER_ROOT=/path/to/your/workspace` so the board is created there.
+`node bin/wrapper.mjs help` lists every command.
+
+---
+
+## The basics
 
 ### 1. Live session board (cross-IDE awareness)
 Every agent joins the board. Each can see who else is active, what they are working on, and which files they hold.
@@ -46,7 +66,7 @@ node bin/wrapper.mjs task done T-12 --as <id> --note "what changed, how verified
 Sessions that go silent for 20 minutes are dropped, their file claims released and their in-progress tasks reopened.
 
 ### 4. Automatic for Claude Code (hooks)
-One command installs hooks that handle session start, heartbeat, message delivery and file claims on their own. A `PreToolUse` hook claims files and asks you when there is a conflict or an out-of-scope edit.
+`setup` (or `install-hooks`) installs hooks that handle session start, heartbeat, message delivery and file claims on their own. A `PreToolUse` hook claims files and asks you when there is a conflict or an out-of-scope edit.
 
 ```bash
 node bin/wrapper.mjs install-hooks <repo-dir> --local
@@ -79,7 +99,13 @@ Nothing is ever pushed.
 ### 9. Handoff between sessions
 `summary add "..."` and `handoff` produce `HANDOFF.md`, so the next session starts with what matters instead of from zero.
 
-### 10. Hard enforcement (Claude Code)
+---
+
+## Advanced (optional): enforcement, reputation and the v4 engine
+
+Everything above works on its own. The rest builds a stricter "virtual software company" on top of it.
+
+### Hard enforcement (Claude Code)
 The pre-edit hook does not just advise, it can deny the edit:
 
 | Code | Blocked because |
@@ -97,20 +123,18 @@ node bin/wrapper.mjs pm audit --emp <id> --tool chatgpt   # audit a worker that 
 node bin/wrapper.mjs pm sitrep                            # team status report
 ```
 
-### 11. Parallel waves, leases and worktrees
+### Parallel waves, leases and worktrees
 `pm schedule` splits a feature's requirements into waves: tasks touching different files run in parallel, tasks sharing a file are ordered. `desk lease` locks a file (on disk and in the database), and `desk worktree` gives an agent its own git worktree.
 
-### 12. Reputation, no self-approval
+### Reputation, no self-approval
 Every agent starts at 100 points. A clean verified pass is +5, a caught defect +4. A scope drift is -5, a QA bounce -8, a bug traced to the agent's commit -15, a fabricated test claim -25, tampering with a test -30. Below 90 is probation; below 65 or two lies is termination, and the agent's mistakes are added to the team's "never do" list. The author of a change can never verify it. `blame` traces a bug to the commit's `Agent-Id:` trailer, and `scoreboard` shows real accuracy per agent.
 
-### 13. Discussion rooms and targeted context
+### Discussion rooms and targeted context
 `room open | say | close` holds a short agent discussion (each turn capped at 280 characters) that ends in a recorded decision. `ctx --emp <id>` gives an agent only the slice of the spec it needs. `ide` writes short instruction files for several tools (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, optionally Copilot's).
 
----
+### The v4 engine
 
-## v4: the "virtual software company" engine
-
-Optional. `wrapper init --dir <repo>` creates a compact `.wrapper/{docs,agents,track}` state store.
+`wrapper init --dir <repo>` creates a compact `.wrapper/{docs,agents,track}` state store.
 
 | Part | What you get |
 |---|---|
@@ -127,16 +151,6 @@ Optional. `wrapper init --dir <repo>` creates a compact `.wrapper/{docs,agents,t
 
 ---
 
-## Quick start
-
-```bash
-git clone <this-repo> .agents/plugins/wrapper
-node .agents/plugins/wrapper/bin/wrapper.mjs session --tool claude --task "my first task"
-node .agents/plugins/wrapper/bin/wrapper.mjs status
-```
-
-For Claude Code, then run `install-hooks` once. For every other tool, tell the agent to follow `rules/AGENTS.md` (join with `session`, run `sync` every turn).
-
 ## Layout
 
 ```
@@ -148,8 +162,14 @@ presets/          roster archetypes and scoring weights
 tests/            node test suites
 ```
 
+## Limits (read before you rely on it)
+- **Hard blocking works in Claude Code only.** Other tools follow `rules/AGENTS.md` voluntarily; `pm audit` can check their work afterwards but cannot stop an edit.
+- Reputation weights and thresholds are untuned defaults from a single workspace. Treat scores as a signal, not a verdict.
+- Some v4 pieces (automatic test-per-function and doc-update hooks) are still manual.
+- Developed and used on Windows; CI runs Linux and Windows on Node 22.5 and 24.
+
 ## Status
-Working and used daily by its author. Some v4 pieces (automatic test-per-function and doc-update hooks) are still manual. Issues and PRs welcome.
+Working and used daily by its author. Issues and PRs welcome, especially from people running it on other setups.
 
 ## License
 Apache-2.0, see [LICENSE](LICENSE).
