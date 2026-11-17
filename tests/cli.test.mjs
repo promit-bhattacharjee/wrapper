@@ -108,3 +108,24 @@ test('file map: hook edits are recorded per task, found by keyword, secrets skip
     assert.match(run(['map', '--task', 'T-1'], root).stdout, /\(stale\)/, 'changed content flags the old line as stale');
   } finally { cleanup(root); }
 });
+
+test('map scan indexes existing files, skips junk, keeps hand-written lines, flags changes stale', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-scan-'));
+  try {
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'node_modules', 'x'), { recursive: true });
+    const f = path.join(root, 'src', 'invoice.js');
+    fs.writeFileSync(f, 'export function createInvoice() {}\nexport const INVOICE_TAX_RATE = 1;\n');
+    fs.writeFileSync(path.join(root, 'node_modules', 'x', 'i.js'), 'export const junk = 1;\n');
+    fs.writeFileSync(path.join(root, '.env'), 'SECRET=1\n');
+    assert.match(run(['map', 'scan'], root).stdout, /scanned 1 file\(s\): 1 added/);
+    assert.match(run(['where', 'invoice tax'], root).stdout, /src\/invoice\.js/);
+    run(['map', 'set', f, 'builds invoices and applies tax'], root);
+    assert.match(run(['map', 'scan'], root).stdout, /0 added, 0 refreshed/, 'rescan is idempotent');
+    fs.appendFileSync(f, 'export const more = 1;\n');
+    assert.match(run(['map', 'scan'], root).stdout, /0 added, 1 refreshed/);
+    const out = run(['where', 'invoice'], root).stdout;
+    assert.match(out, /\(stale\)/);
+    assert.match(out, /builds invoices and applies tax/, 'the hand-written line is preserved');
+  } finally { cleanup(root); }
+});

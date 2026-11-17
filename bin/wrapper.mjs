@@ -19,6 +19,7 @@
 //  Any tool      run <tool> [--task ".."] -- <command...>   launch any agent CLI on the board: joins, sets $WRAPPER_AGENT, ends + checkpoints on exit
 //                adapt <tool> [dir]    write that tool's instruction file (codex|opencode|commandcode|antigravity|claude|<any>)
 //  File memory   where "<keywords>"   find files by what they do (keywords + one line each)     who <path>   tasks/agents that touched it
+//                map scan [dir] [--limit N]    index keywords for existing files in one pass (day-one memory)
 //                map --task T-n | map set <path> "one line" [--kw a,b] | map      files per task / write a line / stats
 //  Health        doctor [--json]       read-only check (Node, sqlite, board, pulse, hooks, instruction files) with a fix for each problem
 //  Help          help | --help | -h     print this header
@@ -623,6 +624,10 @@ function cli(argv) {
         const kw = str(flags.kw) ? str(flags.kw).split(',').map((x) => x.trim()).filter(Boolean) : [];
         const saved = filemap.setLine(ROOT, rel, pos.slice(2).join(' '), kw);
         return console.log(saved ? `saved: ${rel}` : `cannot map ${rel} (missing or not trackable)`);
+      }
+      if (pos[0] === 'scan') {
+        const r = filemap.scan(ROOT, pos[1] || '.', { limit: Number(flags.limit) || 5000 });
+        return console.log(`scanned ${r.seen} file(s): ${r.added} added, ${r.updated} refreshed${r.capped ? ` (stopped at the ${flags.limit || 5000}-file limit, scan a sub-folder or raise --limit)` : ''}`);
       }
       if (flags.task) {
         const rows = filemap.byTask(ROOT, str(flags.task));
