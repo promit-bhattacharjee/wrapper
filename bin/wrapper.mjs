@@ -901,9 +901,14 @@ async function hook(kind) {
 // wrapper run <tool> [--task ".."] -- <command...>: works for any agent CLI, no hooks needed.
 function runTool(pos, flags, argv) {
   const dd = argv.indexOf('--');
-  const tool = pos[0];
   const cmd = dd === -1 ? [] : argv.slice(dd + 1);
-  if (!tool || !cmd.length) die('Usage: run <tool> [--task "what you do"] -- <command...>   e.g. run codex -- codex');
+  // Only what is BEFORE `--` belongs to wrapper; everything after is the tool's own arguments and must not become flags/positionals.
+  ({ pos, flags } = parse(argv.slice(1, dd === -1 ? argv.length : dd)));
+  // The tool name is optional: it defaults to the command's name (agy is the Antigravity CLI, so it joins as "antigravity").
+  const ALIAS = { agy: 'antigravity' };
+  const guess = path.basename(cmd[0] || '').replace(/\.(exe|cmd|bat|ps1)$/i, '');
+  const tool = pos[0] || ALIAS[guess] || guess;
+  if (!tool || !cmd.length) die('Usage: run [tool] [--isolate] [--task "what you do"] -- <command...>   e.g. run codex -- codex   or   run --isolate -- agy');
   const sargs = ['session', '--tool', tool, '--task', str(flags.task) || `${tool} session`];
   const s = spawnSync(process.execPath, [SELF, ...sargs], { encoding: 'utf8', env: process.env });
   if (s.status !== 0) die(`wrapper run: could not join the board\n${s.stderr || s.stdout}`);

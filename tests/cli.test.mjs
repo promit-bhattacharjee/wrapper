@@ -225,3 +225,14 @@ test('config rejects bad values; aliases prints a function per tool', () => {
     assert.match(run(['aliases', '--shell', 'bash'], root).stdout, /codex\(\) \{ node ".*" run codex -- command codex/);
   } finally { cleanup(root); }
 });
+
+test('run: the tool name is inferred from the command, and the tool\'s own args never become wrapper flags', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-infer-'));
+  try {
+    const code = "console.log('ARGS='+process.argv.slice(1).join(','))";
+    const r = run(['run', '--', process.execPath, '-e', code, 'x', '--task', 'y'], root);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /you are "node"/, 'tool name comes from the command');
+    assert.match(r.stdout, /ARGS=x,--task,y/, 'everything after -- reaches the tool untouched');
+  } finally { cleanup(root); }
+});
