@@ -94,6 +94,7 @@ node bin/wrapper.mjs who src/orders/refund.js  # which tasks and agents changed 
 node bin/wrapper.mjs map --task T-12           # files linked to a task
 node bin/wrapper.mjs map set <path> "one line" # write or fix a line by hand
 node bin/wrapper.mjs map scan [dir]            # index existing files in one pass (run once on day one)
+node bin/wrapper.mjs map prune                 # drop entries for deleted files
 ```
 Edits are recorded by the Claude Code hook and by the pulse for other tools. `task done --note "..."` becomes the line for every file the task touched. When a file changes after its line was written, the entry is flagged `(stale)` instead of showing a wrong description. `.env`, keys, lock files and build output are never indexed. `task claim` prints the files most likely involved.
 

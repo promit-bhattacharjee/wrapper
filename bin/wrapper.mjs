@@ -20,6 +20,7 @@
 //                adapt <tool> [dir]    write that tool's instruction file (codex|opencode|commandcode|antigravity|claude|<any>)
 //  File memory   where "<keywords>"   find files by what they do (keywords + one line each)     who <path>   tasks/agents that touched it
 //                map scan [dir] [--limit N]    index keywords for existing files in one pass (day-one memory)
+//                map prune             drop entries for deleted/excluded files
 //                map --task T-n | map set <path> "one line" [--kw a,b] | map      files per task / write a line / stats
 //  Health        doctor [--json]       read-only check (Node, sqlite, board, pulse, hooks, instruction files) with a fix for each problem
 //  Help          help | --help | -h     print this header
@@ -624,6 +625,10 @@ function cli(argv) {
         const kw = str(flags.kw) ? str(flags.kw).split(',').map((x) => x.trim()).filter(Boolean) : [];
         const saved = filemap.setLine(ROOT, rel, pos.slice(2).join(' '), kw);
         return console.log(saved ? `saved: ${rel}` : `cannot map ${rel} (missing or not trackable)`);
+      }
+      if (pos[0] === 'prune') {
+        const r = filemap.prune(ROOT);
+        return console.log(`pruned ${r.removed} entr${r.removed === 1 ? 'y' : 'ies'} (deleted or excluded files), ${r.left} left`);
       }
       if (pos[0] === 'scan') {
         const r = filemap.scan(ROOT, pos[1] || '.', { limit: Number(flags.limit) || 5000 });

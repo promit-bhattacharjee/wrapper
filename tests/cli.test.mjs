@@ -129,3 +129,17 @@ test('map scan indexes existing files, skips junk, keeps hand-written lines, fla
     assert.match(out, /builds invoices and applies tax/, 'the hand-written line is preserved');
   } finally { cleanup(root); }
 });
+
+test('map prune drops deleted files; worktree copies (_work) are never indexed', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-prune-'));
+  try {
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(root, '_work', 'copy', 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'keep.js'), 'export function keepMe() {}\n');
+    fs.writeFileSync(path.join(root, 'src', 'gone.js'), 'export function goneSoon() {}\n');
+    fs.writeFileSync(path.join(root, '_work', 'copy', 'src', 'keep.js'), 'export function keepMe() {}\n');
+    assert.match(run(['map', 'scan'], root).stdout, /scanned 2 file\(s\)/, '_work copy is skipped');
+    fs.rmSync(path.join(root, 'src', 'gone.js'));
+    assert.match(run(['map', 'prune'], root).stdout, /pruned 1 entry.*1 left/);
+  } finally { cleanup(root); }
+});
