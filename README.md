@@ -79,6 +79,33 @@ Nothing is ever pushed.
 ### 9. Handoff between sessions
 `summary add "..."` and `handoff` produce `HANDOFF.md`, so the next session starts with what matters instead of from zero.
 
+### 10. Hard enforcement (Claude Code)
+The pre-edit hook does not just advise, it can deny the edit:
+
+| Code | Blocked because |
+|---|---|
+| `TERMINATED` | the agent's reputation fell below the limit |
+| `PM_HALT` | the team PM issued a halt order |
+| `LIE_TEST_TAMPER` | the agent tried to edit a locked blind test |
+| `LEASE_CONFLICT` | another agent holds a lease on that file |
+| `SCOPE_DRIFT` | the file is outside the task's allowed files (asks you first) |
+
+```bash
+node bin/wrapper.mjs pm pushback --emp <id> --severity halt --msg "stop, wrong branch"
+node bin/wrapper.mjs pm ack --emp <id>
+node bin/wrapper.mjs pm audit --emp <id> --tool chatgpt   # audit a worker that has no hooks
+node bin/wrapper.mjs pm sitrep                            # team status report
+```
+
+### 11. Parallel waves, leases and worktrees
+`pm schedule` splits a feature's requirements into waves: tasks touching different files run in parallel, tasks sharing a file are ordered. `desk lease` locks a file (on disk and in the database), and `desk worktree` gives an agent its own git worktree.
+
+### 12. Reputation, no self-approval
+Every agent starts at 100 points. A clean verified pass is +5, a caught defect +4. A scope drift is -5, a QA bounce -8, a bug traced to the agent's commit -15, a fabricated test claim -25, tampering with a test -30. Below 90 is probation; below 65 or two lies is termination, and the agent's mistakes are added to the team's "never do" list. The author of a change can never verify it. `blame` traces a bug to the commit's `Agent-Id:` trailer, and `scoreboard` shows real accuracy per agent.
+
+### 13. Discussion rooms and targeted context
+`room open | say | close` holds a short agent discussion (each turn capped at 280 characters) that ends in a recorded decision. `ctx --emp <id>` gives an agent only the slice of the spec it needs. `ide` writes short instruction files for several tools (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, optionally Copilot's).
+
 ---
 
 ## v4: the "virtual software company" engine
