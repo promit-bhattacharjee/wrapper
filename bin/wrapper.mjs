@@ -16,6 +16,8 @@
 //  Memory        summary add|clear "text"     handoff (regenerate HANDOFF.md)
 //  Setup         setup [dir]           one-command install: Claude Code hooks + git pre-commit check (dir defaults to the workspace root)
 //                install-hooks [dir] [--local]      pulse start|stop|status
+//  Any tool      run <tool> [--task ".."] -- <command...>   launch any agent CLI on the board: joins, sets $WRAPPER_AGENT, ends + checkpoints on exit
+//                adapt <tool> [dir]    write that tool's instruction file (codex|opencode|commandcode|antigravity|claude|<any>)
 //  Help          help | --help | -h     print this header
 //  Safety        checkpoint [--as ID]   save the agent's work when it ends (worktree: wip commit; shared checkout: hidden snapshot ref)
 //                checkpoint restore <agent> [--repo DIR] [--apply] [--all]    list / restore that agent's snapshot files
@@ -27,6 +29,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { ADAPTERS, adapt } from '../lib/adapters.mjs';
 
 const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number);
 if (NODE_MAJOR < 22 || (NODE_MAJOR === 22 && NODE_MINOR < 5)) {
@@ -587,6 +590,15 @@ function cli(argv) {
       console.log('No .git in ' + dir + ', skipped the pre-commit check. Setup done. Start an agent session with: ' + CLI + ' session --tool claude --task "..."');
       return;
     }
+    case 'adapt': {
+      const tool = pos[0] || die('Usage: adapt <tool> [dir]   (tools: ' + Object.keys(ADAPTERS).join(', ') + ', or any name)');
+      const r = adapt(tool, path.resolve(pos[1] || ROOT), CLI);
+      for (const o of r.out) console.log(`${o.action}: ${o.file}`);
+      console.log(`${r.label}: ${r.note}`);
+      if (!r.known) console.log(`("${tool}" is not a built-in profile, used the generic AGENTS.md setup.)`);
+      return;
+    }
+    case 'run': return runTool(pos, flags, argv);
     case 'help': case '--help': case '-h': return printHelp();
     case 'hook': return hook(pos[0]);
     default: die(`Unknown command "${cmd}". See the header of ${SELF}.`);
@@ -804,6 +816,69 @@ async function hook(kind) {
   } catch (e) {
     process.stderr.write(`wrapper hook error (ignored): ${e.message}\n`);
   }
+}
+
+// wrapper run <tool> [--task ".."] -- <command...>: works for any agent CLI, no hooks needed.
+function runTool(pos, flags, argv) {
+  const dd = argv.indexOf('--');
+  const tool = pos[0];
+  const cmd = dd === -1 ? [] : argv.slice(dd + 1);
+  if (!tool || !cmd.length) die('Usage: run <tool> [--task "what you do"] -- <command...>   e.g. run codex -- codex');
+  const sargs = ['session', '--tool', tool, '--task', str(flags.task) || `${tool} session`];
+  const s = spawnSync(process.execPath, [SELF, ...sargs], { encoding: 'utf8', env: process.env });
+  if (s.status !== 0) die(`wrapper run: could not join the board\n${s.stderr || s.stdout}`);
+  process.stdout.write(s.stdout);
+  const id = (s.stdout.match(/SESSION_ID=(\S+)/) || [])[1];
+  if (!id) die('wrapper run: no SESSION_ID returned');
+  const since = readBoard().seq;
+  const before = snapshotFiles();
+  // Windows needs a shell to launch npm .cmd shims, and shell:true joins args unquoted, so quote them here.
+  const q = (a) => (process.platform === 'win32' && /[\s"&|<>^()]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
+  const child = spawnSync(q(cmd[0]), cmd.slice(1).map(q), { stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, WRAPPER_AGENT: id, WRAPPER_ROOT: ROOT } });
+  monitorReport(id, since, diffSnapshots(before, snapshotFiles()));
+  spawnSync(process.execPath, [SELF, 'end', '--as', id], { stdio: 'inherit', env: process.env });
+  process.exit(child.status ?? 0);
+}
+
+// Default monitor: summarise what the pulse + hooks saw for this session while the tool ran.
+function snapshotFiles(limit = 40000) {
+  const snap = new Map();
+  const walk = (dir) => {
+    let ents; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      if (snap.size >= limit) return;
+      const abs = path.join(dir, e.name);
+      const rel = path.relative(ROOT, abs).split(path.sep).join('/');
+      if (IGNORE.test(rel)) continue;
+      if (e.isDirectory()) walk(abs);
+      else if (e.isFile()) { try { const st = fs.statSync(abs); snap.set(rel, st.mtimeMs + ':' + st.size); } catch {} }
+    }
+  };
+  walk(ROOT);
+  return snap;
+}
+function diffSnapshots(a, b) {
+  const out = [];
+  for (const [k, v] of b) if (a.get(k) !== v) out.push(k);
+  for (const k of a.keys()) if (!b.has(k)) out.push(k);
+  return out;
+}
+
+function monitorReport(id, since, changedOnDisk = []) {
+  const b = readBoard();
+  const mine = b.log.filter((e) => e.seq > since && e.agent === id);
+  const files = new Set();
+  for (const f of changedOnDisk) files.add(f);
+  for (const e of mine.filter((x) => x.kind === 'edit')) for (const f of e.text.replace(/^changed /, '').split(', ')) files.add(f.replace(/ \(\+\d+ more\)$/, ''));
+  const untracked = b.log.filter((e) => e.seq > since && e.kind === 'fs');
+  const unread = b.messages.filter((m) => !m.read_by?.includes?.(id) && (m.to === id || m.to === 'all')).length;
+  const held = Object.entries(b.claims).filter(([, c]) => c.agent === id).map(([p]) => p);
+  console.log('\n--- wrapper monitor ---');
+  console.log(`session ${id}: ${files.size} file(s) changed during this run, ${held.length} claimed, ${unread} unread message(s)`);
+  if (files.size) console.log('  changed: ' + [...files].slice(0, 12).join(', ') + (files.size > 12 ? ' ...' : ''));
+  if (untracked.length) console.log(`  warning: ${untracked.length} change(s) could not be attributed to one session (see LIVE.md)`);
+  const unclaimed = [...files].filter((f) => !held.some((h) => f === h || f.startsWith(h.replace(/\/?$/, '/'))));
+  if (unclaimed.length) console.log('  note: edited without a claim: ' + unclaimed.slice(0, 6).join(', '));
 }
 
 function printHelp() {

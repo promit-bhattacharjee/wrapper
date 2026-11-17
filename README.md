@@ -85,6 +85,13 @@ node bin/wrapper.mjs dispatch backend_order_agent "add refund endpoint" --as <id
 ```
 `dispatch` creates a tagged task and prints a ready-to-paste brief (role, allowed paths, principles, drift guard) for any tool's subagent mechanism.
 
+### Works with every tool
+```bash
+node bin/wrapper.mjs run codex -- codex          # Codex, OpenCode, Command Code, or any CLI agent
+node bin/wrapper.mjs adapt opencode              # write the board rules into AGENTS.md / CLAUDE.md / GEMINI.md
+```
+`run` joins the board, starts the monitor, passes the session id to the tool as `$WRAPPER_AGENT`, and on exit prints what changed, then ends the session. See [docs/ADAPTERS.md](docs/ADAPTERS.md) for the per-tool table.
+
 ### 7. Never lose work (checkpoints)
 When an agent ends, its changes are saved. In a git worktree it makes a commit of only that agent's files. In a shared checkout it writes a hidden snapshot ref (no branch, working tree or index change). Restore later with:
 
