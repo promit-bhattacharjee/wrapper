@@ -85,6 +85,17 @@ node bin/wrapper.mjs dispatch backend_order_agent "add refund endpoint" --as <id
 ```
 `dispatch` creates a tagged task and prints a ready-to-paste brief (role, allowed paths, principles, drift guard) for any tool's subagent mechanism.
 
+### File memory: which file is for what
+Every file an agent edits gets one entry: up to 15 keywords (extracted automatically from function names, headings, routes and error codes, no AI call) plus one line, and the tasks and agents that touched it. Agents look things up instead of searching the repo.
+
+```bash
+node bin/wrapper.mjs where "refund cap"        # top 5 files, about 100 tokens
+node bin/wrapper.mjs who src/orders/refund.js  # which tasks and agents changed it
+node bin/wrapper.mjs map --task T-12           # files linked to a task
+node bin/wrapper.mjs map set <path> "one line" # write or fix a line by hand
+```
+Edits are recorded by the Claude Code hook and by the pulse for other tools. `task done --note "..."` becomes the line for every file the task touched. When a file changes after its line was written, the entry is flagged `(stale)` instead of showing a wrong description. `.env`, keys, lock files and build output are never indexed. `task claim` prints the files most likely involved.
+
 ### Something not working? Run the doctor
 ```bash
 node bin/wrapper.mjs doctor

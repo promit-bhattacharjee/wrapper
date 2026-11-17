@@ -78,3 +78,33 @@ test('doctor: reports corrupt board and stale hooks as failures with a fix, exit
     assert.ok(JSON.parse(r.stdout).filter((x) => x.status === 'fail').every((x) => x.fix));
   } finally { cleanup(root); }
 });
+
+test('file map: hook edits are recorded per task, found by keyword, secrets skipped, stale after change', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-map-'));
+  try {
+    const norm = (p) => p.split(path.sep).join('/');
+    const R = norm(root);
+    fs.mkdirSync(path.join(root, 'src', 'orders'), { recursive: true });
+    const file = path.join(root, 'src', 'orders', 'refund.js');
+    fs.writeFileSync(file, "export function capRefund(o, a) { return Math.min(a, o.paid); }\nexport const REFUND_CAP_EXCEEDED = 'x';\n");
+    fs.writeFileSync(path.join(root, '.env'), 'SECRET=1\n');
+    const hook = (input, cwd) => spawnSync(process.execPath, [BIN, 'hook', 'claude'], { input: JSON.stringify(input), encoding: 'utf8', cwd, env: { ...process.env, WRAPPER_ROOT: root } });
+    const ev = (name, extra = {}) => hook({ hook_event_name: name, session_id: 'abc123def', cwd: R, ...extra }, root);
+    ev('SessionStart');
+    assert.equal(run(['task', 'add', 'refund cap for orders', '--service', 'orders', '--as', 'claude-abc123'], root).status, 0);
+    assert.equal(run(['task', 'claim', 'T-1', '--as', 'claude-abc123'], root).status, 0);
+    for (const f of [file, path.join(root, '.env')]) ev('PostToolUse', { tool_name: 'Edit', tool_input: { file_path: norm(f) } });
+
+    const w = run(['where', 'refund cap'], root).stdout;
+    assert.match(w, /src\/orders\/refund\.js/);
+    assert.match(w, /T-1 claude-abc123/);
+    assert.match(run(['who', '.env'], root).stdout, /not in the file map/, 'secrets are never indexed');
+
+    assert.equal(run(['task', 'done', 'T-1', '--as', 'claude-abc123', '--note', 'caps a refund at the paid amount'], root).status, 0);
+    assert.match(run(['where', 'paid amount'], root).stdout, /caps a refund at the paid amount/);
+
+    fs.appendFileSync(file, 'export const more = 1;\n');
+    ev('PostToolUse', { tool_name: 'Edit', tool_input: { file_path: norm(file) } });
+    assert.match(run(['map', '--task', 'T-1'], root).stdout, /\(stale\)/, 'changed content flags the old line as stale');
+  } finally { cleanup(root); }
+});

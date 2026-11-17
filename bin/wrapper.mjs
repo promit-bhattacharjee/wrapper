@@ -18,6 +18,8 @@
 //                install-hooks [dir] [--local]      pulse start|stop|status
 //  Any tool      run <tool> [--task ".."] -- <command...>   launch any agent CLI on the board: joins, sets $WRAPPER_AGENT, ends + checkpoints on exit
 //                adapt <tool> [dir]    write that tool's instruction file (codex|opencode|commandcode|antigravity|claude|<any>)
+//  File memory   where "<keywords>"   find files by what they do (keywords + one line each)     who <path>   tasks/agents that touched it
+//                map --task T-n | map set <path> "one line" [--kw a,b] | map      files per task / write a line / stats
 //  Health        doctor [--json]       read-only check (Node, sqlite, board, pulse, hooks, instruction files) with a fix for each problem
 //  Help          help | --help | -h     print this header
 //  Safety        checkpoint [--as ID]   save the agent's work when it ends (worktree: wip commit; shared checkout: hidden snapshot ref)
@@ -31,6 +33,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ADAPTERS, adapt } from '../lib/adapters.mjs';
+import * as filemap from '../lib/filemap.mjs';
 
 const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number);
 if (NODE_MAJOR < 22 || (NODE_MAJOR === 22 && NODE_MINOR < 13)) {
@@ -383,6 +386,7 @@ function pulseRun() {
           if (!g.who.sure) tryClaim(b, g.who.id, g.list.slice(0, 8));
           b.agents[g.who.id].last_active = now();
           log(b, g.who.id, 'edit', `changed ${shown}`);
+          filemap.recordEdits(ROOT, g.list.map((rel) => ({ rel, agent: g.who.id, taskId: (b.agents[g.who.id].task || '').match(/^T-\d+/)?.[0] || '' })));
         } else log(b, 'fs-watch', 'fs', `files changed by an untracked/ambiguous session${g.who.cands?.length ? ` (could be ${g.who.cands.join(', ')})` : ''}: ${shown}`);
       }
     });
@@ -600,6 +604,33 @@ function cli(argv) {
       return;
     }
     case 'run': return runTool(pos, flags, argv);
+    case 'where': {
+      const q = pos.join(' ') || die('Usage: where "<keywords>"   e.g. where "refund cap"');
+      const hits = filemap.where(ROOT, q, Number(flags.n) || 5);
+      if (!hits.length) return console.log('No match in the file map. (It fills as agents edit files; add entries with: map set <path> "line")');
+      return console.log(hits.map((h) => filemap.formatEntry(h.rel, h.f)).join('\n'));
+    }
+    case 'who': {
+      const rel = relPath(pos[0] || die('Usage: who <path>'));
+      const f = filemap.who(ROOT, rel);
+      if (!f) return console.log(`${rel}: not in the file map yet`);
+      console.log(filemap.formatEntry(rel, f));
+      return console.log(f.tasks.map((t) => `  ${t.id || '(no task)'} ${t.agent}`).join('\n'));
+    }
+    case 'map': {
+      if (pos[0] === 'set') {
+        const rel = relPath(pos[1] || die('Usage: map set <path> "one line" [--kw a,b,c]'));
+        const kw = str(flags.kw) ? str(flags.kw).split(',').map((x) => x.trim()).filter(Boolean) : [];
+        const saved = filemap.setLine(ROOT, rel, pos.slice(2).join(' '), kw);
+        return console.log(saved ? `saved: ${rel}` : `cannot map ${rel} (missing or not trackable)`);
+      }
+      if (flags.task) {
+        const rows = filemap.byTask(ROOT, str(flags.task));
+        return console.log(rows.length ? rows.map(([r, f]) => filemap.formatEntry(r, f)).join('\n') : `No files recorded for ${flags.task}`);
+      }
+      const st = filemap.stats(ROOT);
+      return console.log(`file map: ${st.files} file(s), ${st.withLine} with a line, ${st.stale} stale`);
+    }
     case 'doctor': return void import('../lib/doctor.mjs').then(async (m) => {
       const res = await m.runDoctor({ ROOT, COORD, BOARD, LOCK, SELF, CLI, STALE_MS, readBoard, pulsePid });
       m.printDoctor(res, !!flags.json);
@@ -649,6 +680,12 @@ function taskCmd(pos, flags) {
   });
   if (err) die(err, 2);
   console.log('ok');
+  if (sub === 'done' && note) filemap.setLineForTask(ROOT, tid, note);
+  if (sub === 'claim') {
+    const t = readBoard().tasks.find((x) => x.id === tid);
+    const hits = filemap.where(ROOT, `${t?.title || ''} ${t?.service || ''}`, 5);
+    if (hits.length) console.log(`Files likely involved (from the file map):\n${hits.map((h) => filemap.formatEntry(h.rel, h.f)).join('\n')}`);
+  }
 }
 
 function agentsCmd(flags) {
@@ -801,16 +838,19 @@ async function hook(kind) {
         const b0 = readBoard(); const a0 = b0.agents[id];
         if (a0 && now() - a0.last_seen < FAST_MS) { const p = pending(b0, id); if (!p.msgs.length && !p.news.length) return; }
       }
+      let fm = null;
       const text = withBoard((b) => {
         ensure(b); touch(b, id, { status: 'active' });
         if (fp) {
           const rel = relPath(fp, cwd);
+          fm = { rel, taskId: (b.agents[id]?.task || '').match(/^T-\d+/)?.[0] || '' };
           b.recent_edits[rel] = { t: now(), agent: id };
           const dup = [...b.log].reverse().slice(0, 12).some((e) => e.agent === id && e.kind === 'edit' && e.text === `edited ${rel}` && now() - e.t < 60000);
           if (!dup) log(b, id, 'edit', `edited ${rel}`);
         }
         return formatDelivery(collect(b, id));
       });
+      if (fm) filemap.recordEdits(ROOT, [{ rel: fm.rel, agent: id, taskId: fm.taskId }]);
       if (text) ctx('PostToolUse', `Wrapper live update:\n${text}`);
     } else if (ev === 'Stop') {
       const p = withBoard((b) => { ensure(b); touch(b, id, { status: 'idle' }); const pe = pending(b, id); const direct = pe.msgs.filter((m) => m.to !== 'all'); if (direct.length && !input.stop_hook_active) { collect(b, id); return { msgs: direct, news: [] }; } return null; });
